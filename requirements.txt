@@ -1,0 +1,9 @@
+lightning
+lmdb
+matplotlib
+pandas
+pyarrow
+scikit-learn
+seaborn
+torch
+torchvision
