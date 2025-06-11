@@ -55,7 +55,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_path", type=str)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--img_pixels", type=int, default=32)
+    parser.add_argument("--img_pixels", type=int, default=64)
     parser.add_argument("--is_embed", action="store_true")
     
     # Model

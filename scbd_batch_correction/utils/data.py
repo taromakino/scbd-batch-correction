@@ -1,12 +1,9 @@
-import lmdb
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import torchvision.transforms as T
-from scbd_batch_correction.utils.enum import ExperimentGroup
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset, Sampler
+from torch.utils.data import Dataset, DataLoader, Sampler
 from typing import Tuple, List
 from utils.const import UINT32_MAX
 
@@ -14,44 +11,6 @@ from utils.const import UINT32_MAX
 class Arcsinh(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.arcsinh(x)
-
-
-class OpticalPooledScreeningDataset(Dataset):
-    def __init__(
-            self,
-            df: pd.DataFrame,
-            lmdb_treatment_dir: str,
-            lmdb_control_dir: str,
-            img_channels: int,
-            img_original_pixels: int,
-            img_pixels: int,
-    ):
-        self.df = df
-        self.img_channels = img_channels
-        self.img_original_pixels = img_original_pixels
-        self.lmdb_treatment = lmdb.Environment(lmdb_treatment_dir, readonly=True, readahead=False, lock=False)
-        self.lmdb_control = lmdb.Environment(lmdb_control_dir, readonly=True, readahead=False, lock=False)
-        self.transforms = T.Compose([
-            T.Resize((img_pixels, img_pixels)),
-            Arcsinh(),
-            T.Normalize(7., 7.)
-        ])
-
-    def __len__(self) -> int:
-        return len(self.df)
-
-    def __getitem__(self, idx: int) -> Tuple[Tensor, pd.Series]:
-        row = self.df.iloc[idx]
-        is_treatment = self.df.group.iloc[idx] == ExperimentGroup.TREATMENT
-        lmdb = self.lmdb_treatment if is_treatment else self.lmdb_control
-        img_name = f'{row.UID}_{row.plate}_{row.well}_{row.tile}_{row.gene_symbol_0}_{row["index"]}'
-        with lmdb.begin(write=False, buffers=True) as txn:
-            buf = txn.get(img_name.encode())
-            x = np.frombuffer(buf, dtype="uint16")
-        x = x.reshape((self.img_channels, self.img_original_pixels, self.img_original_pixels))
-        x = torch.tensor(x)
-        x = self.transforms(x)
-        return x, row
 
 
 class YBatchSampler(Sampler):
@@ -100,7 +59,7 @@ def collate(batch: List[Tuple[torch.Tensor, pd.Series]]) -> Tuple[torch.Tensor, 
 
 
 def get_dataloader(
-        dataset: OpticalPooledScreeningDataset,
+        dataset: Dataset,
         is_y_batch: bool,
         pmf_y: np.ndarray,
         batch_size: int,

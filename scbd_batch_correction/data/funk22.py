@@ -1,11 +1,15 @@
+import lmdb
 import numpy as np
 import os
 import pandas as pd
+import torch
+import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
-from utils.enum import ExperimentGroup
-from scbd_batch_correction.utils.data import OpticalPooledScreeningDataset, get_dataloader
+from scbd_batch_correction.utils.data import Arcsinh, get_dataloader
+from scbd_batch_correction.utils.enum import ExperimentGroup
 from scbd_batch_correction.utils.hparams import HParams
-from torch.utils.data import DataLoader
+from torch import Tensor
+from torch.utils.data import Dataset, DataLoader
 from typing import Tuple
 
 
@@ -13,7 +17,7 @@ IMG_CHANNEL_NAMES = [
     "DNA damage",
     "F-actin",
     "DNA content",
-    "Microtubules"
+    "Microtubules",
 ]
 PLATES = [
     "20200202_6W-LaC024A",
@@ -21,12 +25,50 @@ PLATES = [
     "20200202_6W-LaC024E",
     "20200202_6W-LaC024F",
     "20200206_6W-LaC025A",
-    "20200206_6W-LaC025B"
+    "20200206_6W-LaC025B",
 ]
 PH_DIMS = (2960, 2960)
 VAL_RATIO = 0.02
 IMG_ORIGINAL_PIXELS = 100
 IMG_CHANNELS = len(IMG_CHANNEL_NAMES)
+
+
+class Funk22Dataset(Dataset):
+    def __init__(
+            self,
+            df: pd.DataFrame,
+            lmdb_treatment_dir: str,
+            lmdb_control_dir: str,
+            img_channels: int,
+            img_original_pixels: int,
+            img_pixels: int,
+    ):
+        self.df = df
+        self.img_channels = img_channels
+        self.img_original_pixels = img_original_pixels
+        self.lmdb_treatment = lmdb.Environment(lmdb_treatment_dir, readonly=True, readahead=False, lock=False)
+        self.lmdb_control = lmdb.Environment(lmdb_control_dir, readonly=True, readahead=False, lock=False)
+        self.transforms = T.Compose([
+            T.Resize((img_pixels, img_pixels)),
+            Arcsinh(),
+            T.Normalize(7., 7.),
+        ])
+
+    def __len__(self) -> int:
+        return len(self.df)
+
+    def __getitem__(self, idx: int) -> Tuple[Tensor, pd.Series]:
+        row = self.df.iloc[idx]
+        is_treatment = self.df.group.iloc[idx] == ExperimentGroup.TREATMENT
+        lmdb = self.lmdb_treatment if is_treatment else self.lmdb_control
+        img_name = f'{row.UID}_{row.plate}_{row.well}_{row.tile}_{row.gene_symbol_0}_{row["index"]}'
+        with lmdb.begin(write=False, buffers=True) as txn:
+            buf = txn.get(img_name.encode())
+            x = np.frombuffer(buf, dtype="uint16")
+        x = x.reshape((self.img_channels, self.img_original_pixels, self.img_original_pixels))
+        x = torch.tensor(x)
+        x = self.transforms(x)
+        return x, row
 
 
 def get_lmdb_treatment_dir(data_dir: str) -> str:
@@ -101,7 +143,7 @@ def get_data(hparams: HParams) -> Tuple[DataLoader, DataLoader, DataLoader, dict
     lmdb_treatment_dir = get_lmdb_treatment_dir(hparams.data_dir)
     lmdb_control_dir = get_lmdb_control_dir(hparams.data_dir)
 
-    dataset_train = OpticalPooledScreeningDataset(
+    dataset_train = Funk22Dataset(
         df_train,
         lmdb_treatment_dir,
         lmdb_control_dir,
@@ -110,7 +152,7 @@ def get_data(hparams: HParams) -> Tuple[DataLoader, DataLoader, DataLoader, dict
         hparams.img_pixels,
     )
 
-    dataset_val = OpticalPooledScreeningDataset(
+    dataset_val = Funk22Dataset(
         df_val,
         lmdb_treatment_dir,
         lmdb_control_dir,
@@ -119,7 +161,7 @@ def get_data(hparams: HParams) -> Tuple[DataLoader, DataLoader, DataLoader, dict
         hparams.img_pixels,
     )
 
-    dataset_all = OpticalPooledScreeningDataset(
+    dataset_all = Funk22Dataset(
         df,
         lmdb_treatment_dir,
         lmdb_control_dir,

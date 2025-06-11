@@ -1,11 +1,14 @@
+import lmdb
 import numpy as np
 import os
 import pandas as pd
+import torch
+import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
-from utils.enum import ExperimentGroup
-from scbd_batch_correction.utils.data import OpticalPooledScreeningDataset, get_dataloader
+from scbd_batch_correction.utils.data import Arcsinh, get_dataloader
 from scbd_batch_correction.utils.hparams import HParams
-from torch.utils.data import DataLoader
+from torch import Tensor
+from torch.utils.data import Dataset, DataLoader
 from typing import Tuple
 
 
@@ -16,16 +19,42 @@ PLATES = [
 
 ]
 VAL_RATIO = 0.02
-IMG_ORIGINAL_PIXELS = None
+IMG_ORIGINAL_PIXELS = 64
 IMG_CHANNELS = len(IMG_CHANNEL_NAMES)
 
 
-def get_lmdb_treatment_dir(data_dir: str) -> str:
-    raise NotImplementedError
+class CellPainting2Dataset(Dataset):
+    def __init__(
+            self,
+            df: pd.DataFrame,
+            data_dir: str,
+            img_channels: int,
+            img_original_pixels: int,
+            img_pixels: int,
+    ):
+        self.df = df
+        self.img_channels = img_channels
+        self.img_original_pixels = img_original_pixels
+        self.lmdb = lmdb.Environment(data_dir, readonly=True, readahead=False, lock=False)
+        self.transforms = T.Compose([
+            T.Resize((img_pixels, img_pixels)),
+            Arcsinh(),
+            T.Normalize(7., 7.),
+        ])
 
+    def __len__(self) -> int:
+        return len(self.df)
 
-def get_lmdb_control_dir(data_dir: str) -> str:
-    raise NotImplementedError
+    def __getitem__(self, idx: int) -> Tuple[Tensor, pd.Series]:
+        row = self.df.iloc[idx]
+        img_name = f'{row.UID}_{row.plate}_{row.well}_{row.tile}_{row.gene_symbol_0}_{row["index"]}'
+        with self.lmdb.begin(write=False, buffers=True) as txn:
+            buf = txn.get(img_name.encode())
+            x = np.frombuffer(buf, dtype="uint16")
+        x = x.reshape((self.img_channels, self.img_original_pixels, self.img_original_pixels))
+        x = torch.tensor(x)
+        x = self.transforms(x)
+        return x, row
 
 
 def get_y(df: pd.DataFrame) -> pd.Series:
@@ -43,22 +72,12 @@ def get_e(df: pd.DataFrame) -> pd.Series:
     raise NotImplementedError
 
 
-def get_group_df(dir: str, group: ExperimentGroup) -> pd.DataFrame:
-    """
-    Get the metadata from the lmdb directory.
-    """
-    raise NotImplementedError
-
-
 def get_df(data_dir: str) -> pd.DataFrame:
     """
     Get the metadata for the treatment and control groups, and combine them into a single dataframe. Add the "y" column
     which are the integer values of the perturbed gene, and the "e" column which are the integer values of the batch.
     """
-    df_treatment = get_group_df(get_lmdb_treatment_dir(data_dir), ExperimentGroup.TREATMENT)
-    df_control = get_group_df(get_lmdb_control_dir(data_dir), ExperimentGroup.CONTROL)
-    df = pd.concat((df_treatment, df_control))
-    df.reset_index(drop=True, inplace=True)
+    df = pd.read_pickle(os.path.join(data_dir))
     df["y"] = get_y(df)
     df["e"] = get_e(df)
     df = df.sample(frac=1, random_state=0)
@@ -73,31 +92,25 @@ def get_data(hparams: HParams) -> Tuple[DataLoader, DataLoader, DataLoader, dict
     df = get_df(hparams.data_dir)
     df_train, df_val = train_test_split(df, test_size=VAL_RATIO)
 
-    lmdb_treatment_dir = get_lmdb_treatment_dir(hparams.data_dir)
-    lmdb_control_dir = get_lmdb_control_dir(hparams.data_dir)
-
-    dataset_train = OpticalPooledScreeningDataset(
+    dataset_train = CellPainting2Dataset(
         df_train,
-        lmdb_treatment_dir,
-        lmdb_control_dir,
+        hparams.data_dir,
         IMG_CHANNELS,
         IMG_ORIGINAL_PIXELS,
         hparams.img_pixels,
     )
 
-    dataset_val = OpticalPooledScreeningDataset(
+    dataset_val = CellPainting2Dataset(
         df_val,
-        lmdb_treatment_dir,
-        lmdb_control_dir,
+        hparams.data_dir,
         IMG_CHANNELS,
         IMG_ORIGINAL_PIXELS,
         hparams.img_pixels,
     )
 
-    dataset_all = OpticalPooledScreeningDataset(
+    dataset_all = CellPainting2Dataset(
         df,
-        lmdb_treatment_dir,
-        lmdb_control_dir,
+        hparams.data_dir,
         IMG_CHANNELS,
         IMG_ORIGINAL_PIXELS,
         hparams.img_pixels,
