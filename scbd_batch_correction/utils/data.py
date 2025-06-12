@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader, Sampler
 from typing import Tuple, List
-from utils.const import UINT32_MAX
+from scbd_batch_correction.utils.const import UINT32_MAX
 
 
 class Arcsinh(nn.Module):
@@ -24,10 +24,26 @@ class YBatchSampler(Sampler):
         super().__init__()
         assert batch_size % y_per_batch == 0
         self.y = y
-        self.pmf_y = pmf_y
+        # self.pmf_y = pmf_y
         self.y_per_batch = y_per_batch
         self.batch_size_per_y = batch_size // y_per_batch
-        self.y_unique = np.unique(y)
+        # self.y_unique = np.unique(y)
+        # ACL: edit due to issues in small test set
+        # Ensure y_unique and pmf_y match
+        self.y_unique = np.sort(np.unique(y))
+        # Convert to numpy if it's a tensor
+        y_np = y.numpy() if torch.is_tensor(y) else y
+        counts = np.bincount(y_np)
+        # Truncate or pad pmf_y to match y_unique length
+        if len(counts) > len(self.y_unique):
+            self.pmf_y = counts[self.y_unique]
+        else:
+            self.pmf_y = np.zeros(len(self.y_unique))
+            self.pmf_y[:len(counts)] = counts
+        self.pmf_y = self.pmf_y / self.pmf_y.sum()
+        # ACL: end of edit
+        
+        # Create mapping of values to indices
         self.y_to_idxs = {y_value.item(): np.where(y == y_value)[0] for y_value in self.y_unique}
 
     def __iter__(self):

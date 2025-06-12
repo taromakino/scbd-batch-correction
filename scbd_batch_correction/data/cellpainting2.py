@@ -13,14 +13,26 @@ from typing import Tuple
 
 
 IMG_CHANNEL_NAMES = [
-
+    "1-Channel:0:0", "1-Channel:0:1", "1-Channel:0:2", "1-Channel:0:3", "1-Channel:0:4",
+    "2-Channel:0:0", "2-Channel:0:1", "2-Channel:0:2", "2-Channel:0:3", "2-Channel:0:4",
+    "3-Channel:0:0", "3-Channel:0:1", "3-Channel:0:2", "3-Channel:0:3", "3-Channel:0:4",
+    "4-Channel:0:0", "4-Channel:0:1", "4-Channel:0:2", "4-Channel:0:3", "4-Channel:0:4"
 ]
-PLATES = [
-
+WELLS = [ 
+    "A1",
+    "A2",
+    "A3",
+    "B1",
+    "B2",
+    "B3"
 ]
 VAL_RATIO = 0.02
 IMG_ORIGINAL_PIXELS = 64
 IMG_CHANNELS = len(IMG_CHANNEL_NAMES)
+
+# File names for data loading
+METADATA_FILENAME = "lmdb.pkl"
+LMDB_DIRNAME = "cell_crops.lmdb"
 
 
 class CellPainting2Dataset(Dataset):
@@ -35,7 +47,7 @@ class CellPainting2Dataset(Dataset):
         self.df = df
         self.img_channels = img_channels
         self.img_original_pixels = img_original_pixels
-        self.lmdb = lmdb.Environment(data_dir, readonly=True, readahead=False, lock=False)
+        self.lmdb = lmdb.Environment(os.path.join(data_dir, LMDB_DIRNAME), readonly=True, readahead=False, lock=False, subdir=False)
         self.transforms = T.Compose([
             T.Resize((img_pixels, img_pixels)),
             Arcsinh(),
@@ -47,10 +59,13 @@ class CellPainting2Dataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[Tensor, pd.Series]:
         row = self.df.iloc[idx]
-        img_name = f'{row.UID}_{row.plate}_{row.well}_{row.tile}_{row.gene_symbol_0}_{row["index"]}'
+        img_name = f'{row["Well"]}_{row["Gene"]}_{row["index"]}'
         with self.lmdb.begin(write=False, buffers=True) as txn:
             buf = txn.get(img_name.encode())
-            x = np.frombuffer(buf, dtype="uint16")
+            # ACL: edit bc input is float16 but weights are different type
+            x = np.frombuffer(buf, dtype=np.float16)
+            x = x.astype(np.float32)
+            # ACL: end of edit
         x = x.reshape((self.img_channels, self.img_original_pixels, self.img_original_pixels))
         x = torch.tensor(x)
         x = self.transforms(x)
@@ -61,15 +76,22 @@ def get_y(df: pd.DataFrame) -> pd.Series:
     """
     Gets the integer values of the perturbed genes
     """
-    raise NotImplementedError
+    # Get unique genes and create a mapping to integers
+    y_names_unique = sorted(df['Gene'].unique())
+    y_name_to_idx = {y_name: i for i, y_name in enumerate(y_names_unique)}
+    y = df['Gene'].map(y_name_to_idx)
+    return y
 
 
 def get_e(df: pd.DataFrame) -> pd.Series:
     """
-    Gets the integer values of the batch. Here, the batch is defined as the plate and well pair. In Funk22, there are
-    six plates with six wells each. Since two wells are unused in one of the plates, there are 34 plate and well pairs.
+    Gets the integer values of the batch. Here, the batch is defined as WELL ONLY.
     """
-    raise NotImplementedError
+    e_names = df["Well"]
+    e_names_unique = sorted(e_names.unique())
+    e_name_to_idx = {batch_name: i for i, batch_name in enumerate(e_names_unique)}
+    e = e_names.map(e_name_to_idx)
+    return e
 
 
 def get_df(data_dir: str) -> pd.DataFrame:
@@ -77,7 +99,8 @@ def get_df(data_dir: str) -> pd.DataFrame:
     Get the metadata for the treatment and control groups, and combine them into a single dataframe. Add the "y" column
     which are the integer values of the perturbed gene, and the "e" column which are the integer values of the batch.
     """
-    df = pd.read_pickle(os.path.join(data_dir))
+    metadata_path = os.path.join(data_dir, METADATA_FILENAME)
+    df = pd.read_pickle(metadata_path)
     df["y"] = get_y(df)
     df["e"] = get_e(df)
     df = df.sample(frac=1, random_state=0)
