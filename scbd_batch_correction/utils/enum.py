@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class Dataset(Enum):
+    CMNIST = "cmnist"
     FUNK22 = "funk22"
     CELLPAINTING2 = "cellpainting2"
 

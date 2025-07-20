@@ -74,18 +74,22 @@ def collate(batch: List[Tuple[torch.Tensor, pd.Series]]) -> Tuple[torch.Tensor, 
     return x, df
 
 
-def get_dataloader(
+def get_y_batch_dataloader(
         dataset: Dataset,
-        is_y_batch: bool,
         pmf_y: np.ndarray,
         batch_size: int,
         y_per_batch: int,
         workers: int,
 ) -> DataLoader:
-    if is_y_batch:
-        batch_sampler = YBatchSampler(dataset.df.y.values, pmf_y, batch_size, y_per_batch)
-        return DataLoader(dataset, batch_sampler=batch_sampler, num_workers=workers, collate_fn=collate, pin_memory=True,
-            persistent_workers=True)
-    else:
-        return DataLoader(dataset, batch_size=batch_size, num_workers=workers, collate_fn=collate, pin_memory=True,
-            persistent_workers=True)
+    batch_sampler = YBatchSampler(dataset.df.y.values, pmf_y, batch_size, y_per_batch)
+    return DataLoader(dataset, batch_sampler=batch_sampler, num_workers=workers, collate_fn=collate, pin_memory=True,
+        persistent_workers=True)
+
+
+def get_dataloader(
+        dataset: Dataset,
+        batch_size: int,
+        workers: int,
+) -> DataLoader:
+    return DataLoader(dataset, batch_size=batch_size, num_workers=workers, collate_fn=collate, pin_memory=True,
+        persistent_workers=True)

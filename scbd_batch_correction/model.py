@@ -56,7 +56,6 @@ class Model(L.LightningModule):
     def __init__(self, hparams: HParams) -> None:
         super().__init__()
         self.save_hyperparameters(hparams)
-        self.automatic_optimization = False
         self.net_c = SupConNet(self.hparams.img_channels, self.hparams.encoder_type, self.hparams.z_size)
         self.net_s = SupConNet(self.hparams.img_channels, self.hparams.encoder_type, self.hparams.z_size)
 

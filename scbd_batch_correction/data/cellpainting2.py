@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
-from scbd_batch_correction.utils.data import Arcsinh, get_dataloader
+from scbd_batch_correction.utils.data import Arcsinh, get_y_batch_dataloader, get_dataloader
 from scbd_batch_correction.utils.hparams import HParams
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
@@ -143,9 +143,9 @@ def get_data(hparams: HParams) -> Tuple[DataLoader, DataLoader, DataLoader, dict
     pmf_y = np.bincount(y_train)
     pmf_y = pmf_y / pmf_y.sum()
 
-    data_train = get_dataloader(dataset_train, True, pmf_y, hparams.batch_size, hparams.y_per_batch, hparams.workers)
-    data_val = get_dataloader(dataset_val, True, pmf_y, hparams.batch_size, hparams.y_per_batch, hparams.workers)
-    data_all = get_dataloader(dataset_all, False, pmf_y, hparams.batch_size, hparams.y_per_batch, hparams.workers)
+    data_train = get_y_batch_dataloader(dataset_train, pmf_y, hparams.batch_size, hparams.y_per_batch, hparams.workers)
+    data_val = get_y_batch_dataloader(dataset_val, pmf_y, hparams.batch_size, hparams.y_per_batch, hparams.workers)
+    data_all = get_dataloader(dataset_all, hparams.batch_size, hparams.workers)
 
     metadata = {
         "img_channels": IMG_CHANNELS,

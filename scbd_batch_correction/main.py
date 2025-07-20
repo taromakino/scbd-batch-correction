@@ -1,4 +1,5 @@
 import lightning as L
+import scbd_batch_correction.data.cmnist as cmnist
 import scbd_batch_correction.data.funk22 as funk22
 import scbd_batch_correction.data.cellpainting2 as cellpainting2
 from argparse import ArgumentParser
@@ -11,8 +12,10 @@ from scbd_batch_correction.utils.hparams import HParams
 
 def main(hparams: HParams) -> None:
     L.seed_everything(hparams.seed)
-    
-    if hparams.dataset == Dataset.FUNK22:
+
+    if hparams.dataset == Dataset.CMNIST:
+        data_module = cmnist
+    elif hparams.dataset == Dataset.FUNK22:
         data_module = funk22
     else:
         assert hparams.dataset == Dataset.CELLPAINTING2
