@@ -38,6 +38,7 @@ def main(hparams: HParams) -> None:
         logger=logger,
         callbacks=[ModelCheckpoint(filename="{step}", save_top_k=-1)],
         max_steps=hparams.num_train_steps,
+        log_every_n_steps=hparams.num_steps_per_log,
         val_check_interval=hparams.num_steps_per_val,
         limit_val_batches=hparams.limit_val_batches,
         deterministic=True,
@@ -73,6 +74,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=2048)
     parser.add_argument("--y_per_batch", type=int, default=128)
     parser.add_argument("--num_train_steps", type=int, default=50000)
+    parser.add_argument("--num_steps_per_log", type=int, default=5000)
     parser.add_argument("--num_steps_per_val", type=int, default=5000)
     parser.add_argument("--limit_val_batches", type=int, default=500)
     
