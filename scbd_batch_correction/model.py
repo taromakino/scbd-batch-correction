@@ -63,6 +63,14 @@ class Model(L.LightningModule):
         x, df = batch
         y = torch.tensor(df.y.values, device=self.device)
         e = torch.tensor(df.e.values, device=self.device)
+
+        if torch.isnan(x).any():
+            raise ValueError("x contains NaN values")
+        if torch.isnan(y).any():
+            raise ValueError("y contains NaN values")
+        if torch.isnan(e).any():
+            raise ValueError("e contains NaN values")
+
         return x, y, e
 
     def get_supcon_loss(self, z: Tensor, u: Tensor) -> Tensor:
