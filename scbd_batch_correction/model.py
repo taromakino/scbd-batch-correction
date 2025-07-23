@@ -115,6 +115,10 @@ class Model(L.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=False)
         return loss
 
+    def on_before_optimizer_step(self, optimizer) -> None:
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.parameters(), self.trainer.gradient_clip_val)
+        self.log("grad_norm", grad_norm, on_step=True, on_epoch=False)
+
     def validation_step(self, batch: Tuple[Tensor, pd.DataFrame], batch_idx: int) -> None:
         x, y, e = self.get_inputs(batch)
         loss = self(x, y, e)

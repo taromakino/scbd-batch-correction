@@ -41,6 +41,7 @@ def main(hparams: HParams) -> None:
         log_every_n_steps=hparams.num_steps_per_log,
         val_check_interval=hparams.num_steps_per_val,
         limit_val_batches=hparams.limit_val_batches,
+        gradient_clip_val=hparams.max_grad_norm,
         deterministic=True,
     )
 
@@ -77,6 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_steps_per_log", type=int, default=5000)
     parser.add_argument("--num_steps_per_val", type=int, default=5000)
     parser.add_argument("--limit_val_batches", type=int, default=500)
+    parser.add_argument("--max_grad_norm", type=float, default=1000.)
     
     hparams = HParams()
     hparams.update(parser.parse_args().__dict__)
