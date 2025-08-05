@@ -112,6 +112,8 @@ class Model(L.LightningModule):
     def training_step(self, batch: Tuple[Tensor, pd.DataFrame], batch_idx: int) -> Tensor:
         x, y, e = self.get_inputs(batch)
         loss = self(x, y, e)
+        if torch.isnan(loss):
+            return None
         self.log("train_loss", loss, on_step=True, on_epoch=False)
         return loss
 
