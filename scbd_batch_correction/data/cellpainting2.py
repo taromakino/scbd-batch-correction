@@ -62,10 +62,11 @@ class CellPainting2Dataset(Dataset):
         img_name = f'{row["Well"]}_{row["Gene"]}_{row["index"]}'
         with self.lmdb.begin(write=False, buffers=True) as txn:
             buf = txn.get(img_name.encode())
-            # ACL: edit bc input is float16 but weights are different type
-            x = np.frombuffer(buf, dtype=np.float16)
-            x = x.astype(np.float32)
-            # ACL: end of edit
+            x = np.frombuffer(buf, dtype="uint16")
+            # # ACL: edit bc input is float16 but weights are different type
+            # x = np.frombuffer(buf, dtype=np.float16)
+            # x = x.astype(np.float32)
+            # # ACL: end of edit
         x = x.reshape((self.img_channels, self.img_original_pixels, self.img_original_pixels))
         x = torch.tensor(x)
         x = self.transforms(x)
